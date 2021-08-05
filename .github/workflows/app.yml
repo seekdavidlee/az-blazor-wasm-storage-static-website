@@ -47,7 +47,7 @@ jobs:
           $deployOutputText = (az deployment group create --name $deploymentName --resource-group ${{ secrets.RESOURCE_GROUP }} --template-file Deployment/deploy.bicep --parameters `
             environment=${{ needs.setup.outputs.build_env }} `
             branch=${{ github.ref }} `
-            suffix=${{ secrets.SUFFIX }}
+            suffix=${{ secrets.SUFFIX }} `
             managedUserId=${{ secrets.MANAGED_USER_ID }})
           $deployOutput = $deployOutputText | ConvertFrom-Json
           $accountName = $deployOutput.properties.outputs.accountName.value
