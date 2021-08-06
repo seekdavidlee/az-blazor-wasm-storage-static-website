@@ -1,0 +1,63 @@
+on: push
+
+jobs:
+  setup:
+    name: Choose Secrets Environment Job
+    runs-on: windows-latest
+    steps:
+      - id: setup
+        name: Setup Environment Setp
+        run: |
+            if ('${{ github.ref }}' -eq 'refs/heads/main') { 
+              echo "::set-output name=build_env::prod"
+            } else {
+              echo "::set-output name=build_env::dev"
+            }
+    outputs:
+      build_env: ${{ steps.setup.outputs.build_env }}
+
+  build_deploy:
+    name: Build and Deploy
+    needs: setup
+    environment: ${{ needs.setup.outputs.build_env }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup .NET Core SDK 3.1.x
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '3.1.x'
+
+      - name: Setup .NET SDK 5.0.x
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '5.0.x'
+
+      - name: Azure CLI Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          enable-AzPSSession: true
+
+      - id: buid-and-deploy
+        name: Build Azure environment
+        run: |
+          $deploymentName = "demodeploy" + (Get-Date).ToString("yyyyMMddHHmmss")
+          $deployOutputText = (az deployment group create --name $deploymentName --resource-group ${{ secrets.RESOURCE_GROUP }} --template-file Deployment/deploy.bicep --parameters `
+            environment=${{ needs.setup.outputs.build_env }} `
+            branch=${{ github.ref }} `
+            suffix=${{ secrets.SUFFIX }} `
+            managedUserId=${{ secrets.MANAGED_USER_ID }})
+          $deployOutput = $deployOutputText | ConvertFrom-Json
+          $accountName = $deployOutput.properties.outputs.accountName.value
+          echo "::set-output name=accountName::$accountName"
+
+      - uses: kheiakiyama/install-azcopy-action@v1
+        with:
+          version: 'v10'
+
+      - name: Publish Blazor
+        run: |
+          .\Deployment\PublishServices.ps1 -rgName ${{ secrets.RESOURCE_GROUP }} `
+            -accountName "${{ steps.buid-and-deploy.outputs.accountName }}"
